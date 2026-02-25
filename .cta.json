@@ -1,0 +1,31 @@
+{
+  "projectName": "int20h-test-case",
+  "mode": "file-router",
+  "typescript": true,
+  "tailwind": true,
+  "packageManager": "bun",
+  "git": true,
+  "install": true,
+  "addOnOptions": {
+    "drizzle": {
+      "database": "postgresql"
+    }
+  },
+  "includeExamples": true,
+  "envVarValues": {},
+  "routerOnly": false,
+  "version": 1,
+  "framework": "react-cra",
+  "chosenAddOns": [
+    "table",
+    "form",
+    "tanstack-query",
+    "drizzle",
+    "better-auth",
+    "t3env",
+    "neon",
+    "nitro",
+    "shadcn",
+    "eslint"
+  ]
+}
