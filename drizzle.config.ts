@@ -1,12 +1,16 @@
 import { defineConfig } from 'drizzle-kit'
 
-import { serverEnv } from '#/env/server'
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL environment variable is not set')
+}
 
 export default defineConfig({
   out: './drizzle',
-  schema: './src/db/schema',
+  schema: './src/db/schema/index.ts',
   dialect: 'postgresql',
+  extensionsFilters: ['postgis'],
+  tablesFilter: ['!spatial_ref_sys', '!geometry_columns', '!geography_columns'],
   dbCredentials: {
-    url: serverEnv.DATABASE_URL,
+    url: process.env.DATABASE_URL,
   },
 })
