@@ -30,11 +30,31 @@ export const relations = defineRelations(schema, (r) => ({
       from: r.jurisdictions.id,
       to: r.taxRates.jurisdictionId,
     }),
+    identifiers: r.many.jurisdictionIdentifiers({
+      from: r.jurisdictions.id,
+      to: r.jurisdictionIdentifiers.jurisdictionId,
+    }),
   },
   taxRates: {
     jurisdiction: r.one.jurisdictions({
       from: r.taxRates.jurisdictionId,
       to: r.jurisdictions.id,
+    }),
+  },
+  identifierSystems: {
+    identifiers: r.many.jurisdictionIdentifiers({
+      from: r.identifierSystems.id,
+      to: r.jurisdictionIdentifiers.systemId,
+    }),
+  },
+  jurisdictionIdentifiers: {
+    jurisdiction: r.one.jurisdictions({
+      from: r.jurisdictionIdentifiers.jurisdictionId,
+      to: r.jurisdictions.id,
+    }),
+    system: r.one.identifierSystems({
+      from: r.jurisdictionIdentifiers.systemId,
+      to: r.identifierSystems.id,
     }),
   },
 }))
