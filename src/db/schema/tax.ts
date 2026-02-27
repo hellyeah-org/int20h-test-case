@@ -7,6 +7,7 @@ import {
   index,
   pgEnum,
   pgTable,
+  smallint,
   text,
   timestamp,
   uniqueIndex,
@@ -14,10 +15,8 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core'
 
-export const jurisdictionTypeEnum = pgEnum('jurisdiction_type', [
-  'STATE',
-  'COUNTY',
-  'CITY',
+export const jurisdictionKindEnum = pgEnum('jurisdiction_kind', [
+  'ADMINISTRATIVE',
   'SPECIAL',
 ])
 
@@ -26,7 +25,8 @@ export const jurisdictions = pgTable(
   {
     id: uuid('id').defaultRandom().primaryKey(),
     name: text('name').notNull(),
-    type: jurisdictionTypeEnum('type').notNull(),
+    kind: jurisdictionKindEnum('kind').notNull(),
+    level: smallint('level'),
     boundary: geometry('boundary', {
       type: 'multi_polygon',
       mode: 'xy',
@@ -42,6 +42,17 @@ export const jurisdictions = pgTable(
   },
   (t) => [
     check('chk_jurisdictions_name_not_blank', sql`btrim(${t.name}) <> ''`),
+    check(
+      'chk_jurisdictions_level_presence',
+      sql`
+        (${t.kind} = 'ADMINISTRATIVE' AND ${t.level} IS NOT NULL) OR
+        (${t.kind} <> 'ADMINISTRATIVE' AND ${t.level} IS NULL)
+      `,
+    ),
+    check(
+      'chk_jurisdictions_level_range',
+      sql`${t.level} IS NULL OR (${t.level} >= 0 AND ${t.level} <= 10)`,
+    ),
     index('idx_jurisdictions_boundary_gist').using('gist', t.boundary),
     index('idx_jurisdictions_name_trgm_gin').using(
       'gin',
@@ -49,7 +60,6 @@ export const jurisdictions = pgTable(
     ),
   ],
 )
-
 export const identifierSystems = pgTable(
   'identifier_systems',
   {
