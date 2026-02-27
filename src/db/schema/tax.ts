@@ -41,17 +41,26 @@ export const jurisdictions = pgTable(
       .notNull(),
   },
   (t) => [
-    check('chk_jurisdictions_name_not_blank', sql`btrim(${t.name}) <> ''`),
     check(
-      'chk_jurisdictions_level_presence',
-      sql`
-        (${t.kind} = 'ADMINISTRATIVE' AND ${t.level} IS NOT NULL) OR
-        (${t.kind} <> 'ADMINISTRATIVE' AND ${t.level} IS NULL)
-      `,
+      'chk_jurisdictions_name_not_blank',
+      sql`${t.name} = btrim(${t.name}) AND ${t.name} <> ''`,
     ),
     check(
-      'chk_jurisdictions_level_range',
-      sql`${t.level} IS NULL OR (${t.level} >= 0 AND ${t.level} <= 10)`,
+      'chk_jurisdictions_admin_requires_level',
+      sql`${t.kind} <> 'ADMINISTRATIVE' OR ${t.level} IS NOT NULL`,
+    ),
+    check(
+      'chk_jurisdictions_level_allowed',
+      sql`${t.level} IS NULL OR ${t.level} IN (10, 20, 30)`,
+    ),
+    check(
+      'chk_jurisdictions_boundary_not_empty',
+      sql`NOT ST_IsEmpty(${t.boundary})`,
+    ),
+    check('chk_jurisdictions_boundary_valid', sql`ST_IsValid(${t.boundary})`),
+    check(
+      'chk_jurisdictions_boundary_srid_4326',
+      sql`ST_SRID(${t.boundary}) = 4326`,
     ),
     index('idx_jurisdictions_boundary_gist').using('gist', t.boundary),
     index('idx_jurisdictions_name_trgm_gin').using(
@@ -75,8 +84,15 @@ export const identifierSystems = pgTable(
       .notNull(),
   },
   (t) => [
-    check('chk_identifier_systems_key_not_blank', sql`btrim(${t.key}) <> ''`),
-    check('chk_identifier_systems_name_not_blank', sql`btrim(${t.name}) <> ''`),
+    check(
+      'chk_identifier_systems_key_not_blank',
+      sql`${t.key} = btrim(${t.key}) AND ${t.key} <> ''`,
+    ),
+    check(
+      'chk_identifier_systems_name_not_blank',
+      sql`${t.name} = btrim(${t.name}) AND ${t.name} <> ''`,
+    ),
+    check('chk_identifier_systems_key_lower', sql`${t.key} = lower(${t.key})`),
     uniqueIndex('uq_identifier_systems_key').on(t.key),
   ],
 )
@@ -107,15 +123,19 @@ export const jurisdictionIdentifiers = pgTable(
   (t) => [
     check(
       'chk_jurisdiction_identifiers_value_raw_not_blank',
-      sql`btrim(${t.valueRaw}) <> ''`,
+      sql`${t.valueRaw} = btrim(${t.valueRaw}) AND ${t.valueRaw} <> ''`,
     ),
     check(
       'chk_jurisdiction_identifiers_value_norm_not_blank',
-      sql`btrim(${t.valueNorm}) <> ''`,
+      sql`${t.valueNorm} = btrim(${t.valueNorm}) AND ${t.valueNorm} <> ''`,
     ),
     check(
       'chk_jurisdiction_identifiers_scope_not_blank',
-      sql`${t.scope} IS NULL OR btrim(${t.scope}) <> ''`,
+      sql`${t.scope} IS NULL OR (${t.scope} = btrim(${t.scope}) AND ${t.scope} <> '')`,
+    ),
+    check(
+      'chk_jurisdiction_identifiers_value_norm_lower',
+      sql`${t.valueNorm} = lower(${t.valueNorm})`,
     ),
     check(
       'chk_jurisdiction_identifiers_valid_to_gt_from',
@@ -168,7 +188,7 @@ export const taxRates = pgTable(
   },
   (t) => [
     check(
-      'chk_tax_rates_rate_fraction_0_1',
+      'chk_tax_rates_rate_fraction_range',
       sql`${t.rate} >= 0 AND ${t.rate} <= 1`,
     ),
     check(
@@ -184,5 +204,99 @@ export const taxRates = pgTable(
       t.effectiveFrom,
       t.effectiveTo,
     ),
+  ],
+)
+
+export const orders = pgTable(
+  'orders',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    latitude: decimal('latitude', { precision: 9, scale: 6 }).notNull(),
+    longitude: decimal('longitude', { precision: 9, scale: 6 }).notNull(),
+    orderDate: date('order_date', { mode: 'string' }).notNull(),
+    subtotalAmount: decimal('subtotal_amount', {
+      precision: 12,
+      scale: 2,
+    }).notNull(),
+    compositeTaxRate: decimal('composite_tax_rate', {
+      precision: 10,
+      scale: 6,
+    }).notNull(),
+    taxAmount: decimal('tax_amount', { precision: 12, scale: 2 }).notNull(),
+    totalAmount: decimal('total_amount', { precision: 12, scale: 2 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (t) => [
+    check(
+      'chk_orders_lat_range',
+      sql`${t.latitude} >= -90 AND ${t.latitude} <= 90`,
+    ),
+    check(
+      'chk_orders_lon_range',
+      sql`${t.longitude} >= -180 AND ${t.longitude} <= 180`,
+    ),
+    check('chk_orders_subtotal_non_negative', sql`${t.subtotalAmount} >= 0`),
+    check('chk_orders_tax_non_negative', sql`${t.taxAmount} >= 0`),
+    check(
+      'chk_orders_total_consistency',
+      sql`${t.totalAmount} = ${t.subtotalAmount} + ${t.taxAmount}`,
+    ),
+    check(
+      'chk_orders_rate_range',
+      sql`${t.compositeTaxRate} >= 0 AND ${t.compositeTaxRate} <= 1`,
+    ),
+    index('idx_orders_order_date').on(t.orderDate),
+  ],
+)
+
+export const taxLines = pgTable(
+  'tax_lines',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    taxRateId: uuid('tax_rate_id').references(() => taxRates.id, {
+      onDelete: 'set null',
+    }),
+    jurisdictionId: uuid('jurisdiction_id').references(() => jurisdictions.id, {
+      onDelete: 'set null',
+    }),
+    orderId: uuid('order_id')
+      .references(() => orders.id, { onDelete: 'cascade' })
+      .notNull(),
+    rate: decimal('rate', { precision: 10, scale: 6 }).notNull(),
+    amount: decimal('amount', { precision: 12, scale: 2 }).notNull(),
+    jurisdictionName: text('jurisdiction_name').notNull(),
+    jurisdictionKind: jurisdictionKindEnum('jurisdiction_kind').notNull(),
+    jurisdictionLevel: smallint('jurisdiction_level'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index('idx_tax_lines_order').on(t.orderId),
+    index('idx_tax_lines_jurisdiction').on(t.jurisdictionId),
+    check('chk_tax_lines_amount_non_negative', sql`${t.amount} >= 0`),
+    check('chk_tax_lines_rate_range', sql`${t.rate} >= 0 AND ${t.rate} <= 1`),
+    check(
+      'chk_tax_lines_jurisdiction_name_not_blank',
+      sql`${t.jurisdictionName} = btrim(${t.jurisdictionName}) AND ${t.jurisdictionName} <> ''`,
+    ),
+
+    check(
+      'chk_tax_lines_admin_requires_level',
+      sql`${t.jurisdictionKind} <> 'ADMINISTRATIVE' OR ${t.jurisdictionLevel} IS NOT NULL`,
+    ),
+    check(
+      'chk_tax_lines_level_allowed',
+      sql`${t.jurisdictionLevel} IS NULL OR ${t.jurisdictionLevel} IN (10, 20, 30)`,
+    ),
+    uniqueIndex('uq_tax_lines_order_tax_rate')
+      .on(t.orderId, t.taxRateId)
+      .where(sql`${t.taxRateId} IS NOT NULL`),
   ],
 )

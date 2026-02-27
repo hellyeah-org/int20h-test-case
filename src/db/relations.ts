@@ -34,11 +34,19 @@ export const relations = defineRelations(schema, (r) => ({
       from: r.jurisdictions.id,
       to: r.jurisdictionIdentifiers.jurisdictionId,
     }),
+    taxLines: r.many.taxLines({
+      from: r.jurisdictions.id,
+      to: r.taxLines.jurisdictionId,
+    }),
   },
   taxRates: {
     jurisdiction: r.one.jurisdictions({
       from: r.taxRates.jurisdictionId,
       to: r.jurisdictions.id,
+    }),
+    taxLines: r.many.taxLines({
+      from: r.taxRates.id,
+      to: r.taxLines.taxRateId,
     }),
   },
   identifierSystems: {
@@ -55,6 +63,26 @@ export const relations = defineRelations(schema, (r) => ({
     system: r.one.identifierSystems({
       from: r.jurisdictionIdentifiers.systemId,
       to: r.identifierSystems.id,
+    }),
+  },
+  orders: {
+    taxLines: r.many.taxLines({
+      from: r.orders.id,
+      to: r.taxLines.orderId,
+    }),
+  },
+  taxLines: {
+    order: r.one.orders({
+      from: r.taxLines.orderId,
+      to: r.orders.id,
+    }),
+    taxRate: r.one.taxRates({
+      from: r.taxLines.taxRateId,
+      to: r.taxRates.id,
+    }),
+    jurisdiction: r.one.jurisdictions({
+      from: r.taxLines.jurisdictionId,
+      to: r.jurisdictions.id,
     }),
   },
 }))
