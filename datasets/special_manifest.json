@@ -1,0 +1,20 @@
+[
+  {
+    "name": "Metropolitan Commuter Transportation District",
+    "kind": "SPECIAL",
+    "member_fips": [
+      "36005",
+      "36047",
+      "36061",
+      "36081",
+      "36085",
+      "36027",
+      "36059",
+      "36071",
+      "36079",
+      "36087",
+      "36103",
+      "36119"
+    ]
+  }
+]
