@@ -1,275 +1,100 @@
-Welcome to your new TanStack Start app! 
+# Instant Wellness Kits (Sales Tax Compliance Engine)
 
-# Getting Started
+## 1. Problem Detail
 
-To run this application:
+**Instant Wellness Kits** transitioned from a college startup to a viral success overnight. By leveraging drone technology, the company provides ultra-fast "instant resets" to customers anywhere in New York State. However, the rapid operational scaling completely bypassed the legal requirement for sales tax collection.
 
-```bash
-bun install
-bun --bun run dev
-```
+**The Technical Challenge:**
 
-# Building For Production
+Sales tax in New York is not a single flat rate. It is a composite rate made up of state, county, city, and special district taxes. Because drones deliver to exact GPS coordinates (latitude/longitude) rather than traditional street addresses or ZIP codes, traditional tax lookup tables based on ZIP codes are insufficient. ZIP codes often cross tax jurisdiction boundaries, leading to potential under-payment or over-payment.
 
-To build this application for production:
+The company had to implement a system that:
 
-```bash
-bun --bun run build
-```
+1. Takes GPS coordinates and a timestamp.
+2. Identifies all overlapping tax jurisdictions.
+3. Calculates a legally compliant composite tax rate.
 
-## Testing
+## 2. Decision Log & Architecture
 
-This project uses [Vitest](https://vitest.dev/) for testing. You can run the tests with:
+### 2.1. Usage of PostGIS
 
-```bash
-bun --bun run test
-```
+We chose PostGIS (an extension for PostgreSQL) as the core spatial engine.
 
-## Styling
+- **Precision**: Unlike ZIP-to-tax mapping, which is prone to error, PostGIS allows us to perform "Point-in-Polygon" queries. This ensures that the exact coordinate of the drone delivery is matched against the precise geographic boundaries of counties, cities, and special districts.
+- **Performance**: PostGIS utilizes GIST indexing, allowing the database to search through thousands of jurisdiction boundaries in milliseconds.
+- **Standardization**: Using the geometry(MultiPolygon, 4326) type ensures we are using the global standard for GPS coordinates (WGS 84).
 
-This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
+---
 
-### Removing Tailwind CSS
+### 2.2. Logic of Calculating Composite Tax
 
-If you prefer not to use Tailwind CSS:
+The engine implements a hierarchical calculation logic to determine the final rate applied to an order.
 
-1. Remove the demo pages in `src/routes/demo/`
-2. Replace the Tailwind import in `src/styles.css` with your own styles
-3. Remove `tailwindcss()` from the plugins array in `vite.config.ts`
-4. Uninstall the packages: `bun install @tailwindcss/vite tailwindcss -D`
+#### 2.2.1. The Calculation Formula
 
-## Linting & Formatting
+The composite tax rate is determined by the following priority logic:
 
+`CompositeRate = StateRate + LocalRate(City ∨ County) + SpecialRate`
 
-This project uses [eslint](https://eslint.org/) and [prettier](https://prettier.io/) for linting and formatting. Eslint is configured using [tanstack/eslint-config](https://tanstack.com/config/latest/docs/eslint). The following scripts are available:
+**The Local Rate Logic**:
 
-```bash
-bun --bun run lint
-bun --bun run format
-bun --bun run check
-```
+- **State Rate**: Always taken from the jurisdiction with level = 10.
+- **City vs County**: Taken from the jurisdiction with level = 20 (County) or level = 30 (City) (_See Alignment with NYS Pub 718_).
+- **Special Rate**: If the point falls within a jurisdiction with kind = SPECIAL (e.g., the Metropolitan Commuter Transportation District - MCTD), that rate is added to the total.
 
+**Alignment with NYS Pub 718:**
 
-## Setting up Better Auth
+This logic is strictly aligned with [_**NYS Publication 718**_](https://www.tax.ny.gov/pdf/publications/sales/pub718.pdf) (**New York State Sales and Use Tax Rates by Jurisdiction**). NYS law dictates that certain cities (like Yonkers or New Rochelle) "pre-empt" the county tax or add to it in specific ways. Our hierarchical "Level 30 > Level 20" logic mirrors how the state reports these taxes.
 
-1. Generate and set the `BETTER_AUTH_SECRET` environment variable in your `.env.local`:
+**Scalability Improvement:**
 
-   ```bash
-   bunx --bun @better-auth/cli secret
-   ```
+Currently, the formula is hardcoded to NYS logic. To make the application globally scalable, we could introduce a `TaxCalculationRules` table. This table would store logic for different regions (e.g., "In Texas, use [State + City + Transit]") allowing the code to remain generic while the database drives the regional logic.
 
-2. Visit the [Better Auth documentation](https://www.better-auth.com) to unlock the full potential of authentication in your app.
+---
 
-### Adding a Database (Optional)
+### 2.3. Extensible Schema: Identifiers and Systems
 
-Better Auth can work in stateless mode, but to persist user data, add a database:
+We avoided hardcoding columns like `nys_reporting_code` or `fips_code` directly into the `jurisdictions` table. Instead, we implemented:
 
-```typescript
-// src/lib/auth.ts
-import { betterAuth } from "better-auth";
-import { Pool } from "pg";
+- `identifier_systems`: A table defining the type of ID (e.g., 'FIPS', 'NYS_CODE').
+- `jurisdiction_identifiers`: A many-to-one mapping table.
 
-export const auth = betterAuth({
-  database: new Pool({
-    connectionString: process.env.DATABASE_URL,
-  }),
-  // ... rest of config
-});
-```
+**Why this is scalable:**
 
-Then run migrations:
+This allows a single jurisdiction to be identified by multiple systems simultaneously. For example, a county could have a Federal FIPS code for drone flight logs and a separate NYS Reporting Code for tax filings. If the company expands to New Jersey or international markets, we simply add a new "Identifier System" without changing the database schema. This decouples our geographic data from specific state-level bureaucratic naming conventions.
 
-```bash
-bunx --bun @better-auth/cli migrate
-```
+---
 
+### 2.4. Temporal Data: effective_from and effective_to
 
-## T3Env
+Tax rates are not static; they change quarterly or annually.
 
-- You can use T3Env to add type safety to your environment variables.
-- Add Environment variables to the `src/env.mjs` file.
-- Use the environment variables in your code.
+- **Scenario Assumption**: As the company was recently founded, our current implementation focuses on current orders. Users cannot place backdated orders. Therefore, the data sourced from [_**Pub 718**_](https://www.tax.ny.gov/pdf/publications/sales/pub718.pdf) is sufficient for current operations.
 
-### Usage
+- **Future-Proofing**: By including `effective_from` and `effective_to`, the system can handle future tax hikes or cuts automatically. When a rate changes, we simply insert the new rate with the correct date range. The engine will pick the rate where `OrderDate` falls between the "from" and "to" dates.
 
-```ts
-import { env } from "#/env";
+- **Historical Accuracy**: If we ever need to audit or process orders from the past, we would integrate [_**Pub 718-A**_](https://www.tax.ny.gov/pdf/publications/sales/pub718a.pdf) (**Enactment and Effective Dates of Sales and Use Tax Rates**). This would allow us to reconstruct exactly what the tax was on any given date in history, ensuring the company remains audit-proof as it grows.
 
-console.log(env.VITE_APP_TITLE);
-```
+---
 
+### 2.5 External Tax Services
 
+It is important to note that it would be significantly easier to use an external service like [**Avalara**](https://www.avalara.com/us/en/index.html) or [**Vertex**](https://www.vertexinc.com/).
 
+- **Ease of Use**: These services handle the complex updates of tax laws, boundaries, and rates across thousands of jurisdictions automatically.
+- **Decision Rationale**: In this startup scenario, building a custom PostGIS engine provided immediate cost savings and handled the specific drone-GPS coordinate requirement directly without requiring a standardized street address, which external APIs often demand.
 
+## 3. Tech Stack
 
-## Setting up Neon
-
-When running the `dev` command, the `@neondatabase/vite-plugin-postgres` will identify there is not a database setup. It will then create and seed a claimable database.
-
-It is the same process as [Neon Launchpad](https://neon.new).
-
-> [!IMPORTANT]  
-> Claimable databases expire in 72 hours.
-
-
-## Shadcn
-
-Add components using the latest version of [Shadcn](https://ui.shadcn.com/).
-
-```bash
-pnpm dlx shadcn@latest add button
-```
-
-
-
-## Routing
-
-This project uses [TanStack Router](https://tanstack.com/router) with file-based routing. Routes are managed as files in `src/routes`.
-
-### Adding A Route
-
-To add a new route to your application just add a new file in the `./src/routes` directory.
-
-TanStack will automatically generate the content of the route file for you.
-
-Now that you have two routes you can use a `Link` component to navigate between them.
-
-### Adding Links
-
-To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/react-router`.
-
-```tsx
-import { Link } from "@tanstack/react-router";
-```
-
-Then anywhere in your JSX you can use it like so:
-
-```tsx
-<Link to="/about">About</Link>
-```
-
-This will create a link that will navigate to the `/about` route.
-
-More information on the `Link` component can be found in the [Link documentation](https://tanstack.com/router/v1/docs/framework/react/api/router/linkComponent).
-
-### Using A Layout
-
-In the File Based Routing setup the layout is located in `src/routes/__root.tsx`. Anything you add to the root route will appear in all the routes. The route content will appear in the JSX where you render `{children}` in the `shellComponent`.
-
-Here is an example layout that includes a header:
-
-```tsx
-import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
-
-export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: 'utf-8' },
-      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'My App' },
-    ],
-  }),
-  shellComponent: ({ children }) => (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        <header>
-          <nav>
-            <Link to="/">Home</Link>
-            <Link to="/about">About</Link>
-          </nav>
-        </header>
-        {children}
-        <Scripts />
-      </body>
-    </html>
-  ),
-})
-```
-
-More information on layouts can be found in the [Layouts documentation](https://tanstack.com/router/latest/docs/framework/react/guide/routing-concepts#layouts).
-
-## Server Functions
-
-TanStack Start provides server functions that allow you to write server-side code that seamlessly integrates with your client components.
-
-```tsx
-import { createServerFn } from '@tanstack/react-start'
-
-const getServerTime = createServerFn({
-  method: 'GET',
-}).handler(async () => {
-  return new Date().toISOString()
-})
-
-// Use in a component
-function MyComponent() {
-  const [time, setTime] = useState('')
-  
-  useEffect(() => {
-    getServerTime().then(setTime)
-  }, [])
-  
-  return <div>Server time: {time}</div>
-}
-```
-
-## API Routes
-
-You can create API routes by using the `server` property in your route definitions:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-import { json } from '@tanstack/react-start'
-
-export const Route = createFileRoute('/api/hello')({
-  server: {
-    handlers: {
-      GET: () => json({ message: 'Hello, World!' }),
-    },
-  },
-})
-```
-
-## Data Fetching
-
-There are multiple ways to fetch data in your application. You can use TanStack Query to fetch data from a server. But you can also use the `loader` functionality built into TanStack Router to load the data for a route before it's rendered.
-
-For example:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-
-export const Route = createFileRoute('/people')({
-  loader: async () => {
-    const response = await fetch('https://swapi.dev/api/people')
-    return response.json()
-  },
-  component: PeopleComponent,
-})
-
-function PeopleComponent() {
-  const data = Route.useLoaderData()
-  return (
-    <ul>
-      {data.results.map((person) => (
-        <li key={person.name}>{person.name}</li>
-      ))}
-    </ul>
-  )
-}
-```
-
-Loaders simplify your data fetching logic dramatically. Check out more information in the [Loader documentation](https://tanstack.com/router/latest/docs/framework/react/guide/data-loading#loader-parameters).
-
-# Demo files
-
-Files prefixed with `demo` can be safely deleted. They are there to provide a starting point for you to play around with the features you've installed.
-
-# Learn More
-
-You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
-
-For TanStack Start specific documentation, visit [TanStack Start](https://tanstack.com/start).
+- **Full-stack Framework**: TanStack Start (React 19)
+- **Routing**: TanStack Router (Type-safe)
+- **Database**: PostgreSQL ([Neon Postgres](https://neon.com/)) with PostGIS extension
+- **ORM**: Drizzle ORM
+- **Authentication**: Better Auth
+- **State Management**: TanStack Query (React Query)
+- **Styling**: Tailwind CSS 4
+- **UI Components**: Shadcn UI & Radix UI
+- **Validation**: Zod
+- **Server Engine**: Nitro
+- **Runtime/Pkg Manager**: Bun
+- **Deployment**: Vercel
