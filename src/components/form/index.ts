@@ -1,2 +1,2 @@
-export { TextField } from './field-components'
-export { SubmitButton } from './form-components'
+export { TextField, PasswordField } from './field-components'
+export { SubmitButton, FormError } from './form-components'
