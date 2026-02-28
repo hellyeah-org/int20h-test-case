@@ -122,7 +122,7 @@ cd int20h-test-case
 `bun install`
 
 3. Environment Variables:
-Copy the example environment file:
+Copy the example environment file (and input the correct values for each):
 
 `cp .env.example .env`
 
