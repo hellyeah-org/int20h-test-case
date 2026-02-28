@@ -13,10 +13,13 @@ import { Route as ProtectedRouteImport } from './routes/_protected'
 import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as ProtectedIndexRouteImport } from './routes/_protected/index'
 import { Route as ApiOrdersRouteImport } from './routes/api/orders'
+import { Route as ApiImportRouteImport } from './routes/api/import'
 import { Route as AuthVerifyEmailRouteImport } from './routes/_auth/verify-email'
 import { Route as AuthSignUpRouteImport } from './routes/_auth/sign-up'
 import { Route as AuthSignInRouteImport } from './routes/_auth/sign-in'
 import { Route as AuthResetPasswordRouteImport } from './routes/_auth/reset-password'
+import { Route as ApiWorkersProcessBatchRouteImport } from './routes/api/workers/process-batch'
+import { Route as ApiJobsIdRouteImport } from './routes/api/jobs/$id'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const ProtectedRoute = ProtectedRouteImport.update({
@@ -35,6 +38,11 @@ const ProtectedIndexRoute = ProtectedIndexRouteImport.update({
 const ApiOrdersRoute = ApiOrdersRouteImport.update({
   id: '/api/orders',
   path: '/api/orders',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiImportRoute = ApiImportRouteImport.update({
+  id: '/api/import',
+  path: '/api/import',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthVerifyEmailRoute = AuthVerifyEmailRouteImport.update({
@@ -57,6 +65,16 @@ const AuthResetPasswordRoute = AuthResetPasswordRouteImport.update({
   path: '/reset-password',
   getParentRoute: () => AuthRoute,
 } as any)
+const ApiWorkersProcessBatchRoute = ApiWorkersProcessBatchRouteImport.update({
+  id: '/api/workers/process-batch',
+  path: '/api/workers/process-batch',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiJobsIdRoute = ApiJobsIdRouteImport.update({
+  id: '/api/jobs/$id',
+  path: '/api/jobs/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -69,8 +87,11 @@ export interface FileRoutesByFullPath {
   '/sign-in': typeof AuthSignInRoute
   '/sign-up': typeof AuthSignUpRoute
   '/verify-email': typeof AuthVerifyEmailRoute
+  '/api/import': typeof ApiImportRoute
   '/api/orders': typeof ApiOrdersRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/jobs/$id': typeof ApiJobsIdRoute
+  '/api/workers/process-batch': typeof ApiWorkersProcessBatchRoute
 }
 export interface FileRoutesByTo {
   '/': typeof ProtectedIndexRoute
@@ -78,8 +99,11 @@ export interface FileRoutesByTo {
   '/sign-in': typeof AuthSignInRoute
   '/sign-up': typeof AuthSignUpRoute
   '/verify-email': typeof AuthVerifyEmailRoute
+  '/api/import': typeof ApiImportRoute
   '/api/orders': typeof ApiOrdersRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/jobs/$id': typeof ApiJobsIdRoute
+  '/api/workers/process-batch': typeof ApiWorkersProcessBatchRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -89,9 +113,12 @@ export interface FileRoutesById {
   '/_auth/sign-in': typeof AuthSignInRoute
   '/_auth/sign-up': typeof AuthSignUpRoute
   '/_auth/verify-email': typeof AuthVerifyEmailRoute
+  '/api/import': typeof ApiImportRoute
   '/api/orders': typeof ApiOrdersRoute
   '/_protected/': typeof ProtectedIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/jobs/$id': typeof ApiJobsIdRoute
+  '/api/workers/process-batch': typeof ApiWorkersProcessBatchRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -101,8 +128,11 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/sign-up'
     | '/verify-email'
+    | '/api/import'
     | '/api/orders'
     | '/api/auth/$'
+    | '/api/jobs/$id'
+    | '/api/workers/process-batch'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -110,8 +140,11 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/sign-up'
     | '/verify-email'
+    | '/api/import'
     | '/api/orders'
     | '/api/auth/$'
+    | '/api/jobs/$id'
+    | '/api/workers/process-batch'
   id:
     | '__root__'
     | '/_auth'
@@ -120,16 +153,22 @@ export interface FileRouteTypes {
     | '/_auth/sign-in'
     | '/_auth/sign-up'
     | '/_auth/verify-email'
+    | '/api/import'
     | '/api/orders'
     | '/_protected/'
     | '/api/auth/$'
+    | '/api/jobs/$id'
+    | '/api/workers/process-batch'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AuthRoute: typeof AuthRouteWithChildren
   ProtectedRoute: typeof ProtectedRouteWithChildren
+  ApiImportRoute: typeof ApiImportRoute
   ApiOrdersRoute: typeof ApiOrdersRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiJobsIdRoute: typeof ApiJobsIdRoute
+  ApiWorkersProcessBatchRoute: typeof ApiWorkersProcessBatchRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -162,6 +201,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiOrdersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/import': {
+      id: '/api/import'
+      path: '/api/import'
+      fullPath: '/api/import'
+      preLoaderRoute: typeof ApiImportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_auth/verify-email': {
       id: '/_auth/verify-email'
       path: '/verify-email'
@@ -189,6 +235,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/reset-password'
       preLoaderRoute: typeof AuthResetPasswordRouteImport
       parentRoute: typeof AuthRoute
+    }
+    '/api/workers/process-batch': {
+      id: '/api/workers/process-batch'
+      path: '/api/workers/process-batch'
+      fullPath: '/api/workers/process-batch'
+      preLoaderRoute: typeof ApiWorkersProcessBatchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/jobs/$id': {
+      id: '/api/jobs/$id'
+      path: '/api/jobs/$id'
+      fullPath: '/api/jobs/$id'
+      preLoaderRoute: typeof ApiJobsIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/auth/$': {
       id: '/api/auth/$'
@@ -231,8 +291,11 @@ const ProtectedRouteWithChildren = ProtectedRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRouteWithChildren,
   ProtectedRoute: ProtectedRouteWithChildren,
+  ApiImportRoute: ApiImportRoute,
   ApiOrdersRoute: ApiOrdersRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiJobsIdRoute: ApiJobsIdRoute,
+  ApiWorkersProcessBatchRoute: ApiWorkersProcessBatchRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

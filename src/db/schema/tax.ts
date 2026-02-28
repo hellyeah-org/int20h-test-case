@@ -5,6 +5,8 @@ import {
   decimal,
   geometry,
   index,
+  integer,
+  jsonb,
   pgEnum,
   pgTable,
   smallint,
@@ -211,6 +213,10 @@ export const orders = pgTable(
   'orders',
   {
     id: uuid('id').defaultRandom().primaryKey(),
+    importJobId: uuid('import_job_id').references(() => importJobs.id, {
+      onDelete: 'set null',
+    }),
+    externalId: varchar('external_id', { length: 255 }),
     latitude: decimal('latitude', { precision: 9, scale: 6 }).notNull(),
     longitude: decimal('longitude', { precision: 9, scale: 6 }).notNull(),
     orderDate: date('order_date', { mode: 'string' }).notNull(),
@@ -233,6 +239,9 @@ export const orders = pgTable(
       .notNull(),
   },
   (t) => [
+    index('idx_orders_import_job').on(t.importJobId),
+
+    uniqueIndex('uq_orders_external_id').on(t.externalId),
     check(
       'chk_orders_lat_range',
       sql`${t.latitude} >= -90 AND ${t.latitude} <= 90`,
@@ -300,3 +309,24 @@ export const taxLines = pgTable(
       .where(sql`${t.taxRateId} IS NOT NULL`),
   ],
 )
+
+export const jobStatusEnum = pgEnum('job_status', [
+  'PENDING',
+  'PROCESSING',
+  'COMPLETED',
+  'FAILED',
+])
+
+export const importJobs = pgTable('import_jobs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  fileName: text('file_name').notNull(),
+  status: jobStatusEnum('status').default('PENDING').notNull(),
+  totalRows: integer('total_rows').default(0).notNull(),
+  processedRows: integer('processed_rows').default(0).notNull(),
+  failedRows: integer('failed_rows').default(0).notNull(),
+  errors: jsonb('errors').default([]).notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+})
