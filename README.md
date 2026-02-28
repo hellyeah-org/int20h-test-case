@@ -1,7 +1,5 @@
 # Instant Wellness Kits (Sales Tax Compliance Engine)
 
-**NOTE. Vercel does not support websockets for Neon Postgres. Http driver is not compatible with interactive transactions, so we failed to deploy the application in time.**
-
 ## 1. Problem Detail
 
 **Instant Wellness Kits** transitioned from a college startup to a viral success overnight. By leveraging drone technology, the company provides ultra-fast "instant resets" to customers anywhere in New York State. However, the rapid operational scaling completely bypassed the legal requirement for sales tax collection.
