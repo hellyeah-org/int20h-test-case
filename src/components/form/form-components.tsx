@@ -1,5 +1,6 @@
 import { useFormContext } from '#/hooks/form-context'
 import { Button } from '#/components/ui/button'
+import { Alert, AlertDescription } from '#/components/ui/alert'
 
 export function SubmitButton({
   label = 'Submit',
@@ -17,6 +18,28 @@ export function SubmitButton({
           {isSubmitting ? 'Submitting…' : label}
         </Button>
       )}
+    </form.Subscribe>
+  )
+}
+
+export function FormError() {
+  const form = useFormContext()
+
+  return (
+    <form.Subscribe selector={(state) => state.errorMap.onSubmit}>
+      {(formError) => {
+        const message =
+          formError && typeof formError === 'object' && 'form' in formError
+            ? String(formError.form)
+            : typeof formError === 'string'
+              ? formError
+              : null
+        return message ? (
+          <Alert variant="destructive">
+            <AlertDescription>{message}</AlertDescription>
+          </Alert>
+        ) : null
+      }}
     </form.Subscribe>
   )
 }
