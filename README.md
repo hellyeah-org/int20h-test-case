@@ -98,3 +98,45 @@ It is important to note that it would be significantly easier to use an external
 - **Server Engine**: Nitro
 - **Runtime/Pkg Manager**: Bun
 - **Deployment**: Vercel
+
+## 4. Local Development Setup
+
+Follow these instructions to get the Sales Tax Compliance Engine running on your local machine.
+
+### 4.1. Prerequisites
+* **Bun**: The project uses Bun as its runtime and package manager. [Install Bun](https://bun.com/docs/installation#windows).
+* **PostgreSQL with PostGIS**: You must have a PostgreSQL instance (v14+) with the PostGIS extension installed.
+
+--- 
+
+### 4.2. Installation
+1. Clone the repository:
+```
+git clone <repository-url>
+cd int20h-test-case
+```
+2. Install dependencies:
+
+`bun install`
+
+3. Environment Variables:
+Copy the example environment file:
+
+`cp .env.example .env`
+
+---
+### 4.3. Database Initialization
+The engine relies on specific geospatial schemas and tax rate data to function.
+1. **Run Migrations**: This sets up the tables, PostGIS extensions, and geospatial indexes.
+
+`bun db:migrate`
+
+2. **Seed the Database**: This is required to load the NYS tax jurisdictions, identifier systems (FIPS/NYS Codes), and the initial tax rates from the datasets/ directory.
+
+`bun db:seed`
+
+---
+### 4.4. Running the Project
+Start the development server:
+
+`bun dev`
