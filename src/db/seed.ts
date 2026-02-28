@@ -1,10 +1,11 @@
 import { parse } from 'csv-parse/sync'
-import { sql, type InferInsertModel } from 'drizzle-orm'
+import { sql, type InferInsertModel, and, eq, isNull } from 'drizzle-orm'
 import { db } from '#/db/index'
 import {
   jurisdictions,
   jurisdictionIdentifiers,
   identifierSystems,
+  taxRates,
 } from '#/db/schema/tax'
 
 type IdentifierInsert = Pick<
@@ -18,6 +19,15 @@ type GeoFeature = {
     FIPS_CODE?: string
   }
   geometry: Record<string, unknown>
+}
+
+type TaxRateCsvRecord = {
+  jurisdiction_name: string
+  tax_rate: string
+  reporting_code: string
+  level: string
+  effective_from: string
+  effective_to: string
 }
 
 async function seedIdentifierSystems() {
@@ -133,6 +143,65 @@ async function seedSpatialData() {
   }
 }
 
+async function seedTaxRates() {
+  try {
+    const systems = await db.select().from(identifierSystems)
+    const reportingSys = systems.find((s) => s.key === 'nys_reporting_code')
+
+    if (!reportingSys) throw new Error('NYS Reporting Code system not found')
+
+    const csvContent = await Bun.file('datasets/ny_sales_tax_rates.csv').text()
+    const records: TaxRateCsvRecord[] = parse(csvContent, {
+      columns: true,
+      skip_empty_lines: true,
+    })
+
+    for (const record of records) {
+      const targetLevel = record.level ? parseInt(record.level) : null
+
+      const [jurisdiction] = await db
+        .select({ id: jurisdictions.id })
+        .from(jurisdictions)
+        .where(
+          and(
+            eq(jurisdictions.name, record.jurisdiction_name),
+            targetLevel
+              ? eq(jurisdictions.level, targetLevel)
+              : isNull(jurisdictions.level),
+          ),
+        )
+
+      if (!jurisdiction) {
+        console.warn(
+          `Could not find jurisdiction: ${record.jurisdiction_name} (Level: ${record.level})`,
+        )
+        continue
+      }
+
+      if (record.reporting_code) {
+        await db
+          .insert(jurisdictionIdentifiers)
+          .values({
+            jurisdictionId: jurisdiction.id,
+            systemId: reportingSys.id,
+            valueRaw: record.reporting_code,
+            valueNorm: record.reporting_code.toLowerCase().trim(),
+          })
+          .onConflictDoNothing()
+      }
+
+      await db.insert(taxRates).values({
+        jurisdictionId: jurisdiction.id,
+        rate: record.tax_rate,
+        effectiveFrom: record.effective_from,
+        effectiveTo: record.effective_to || null,
+      })
+    }
+  } catch (error) {
+    throw error
+  }
+}
+
 function chunkArray<T>(array: T[], size: number): T[][] {
   return Array.from({ length: Math.ceil(array.length / size) }, (_v, i) =>
     array.slice(i * size, i * size + size),
@@ -141,8 +210,13 @@ function chunkArray<T>(array: T[], size: number): T[][] {
 
 async function runSeed() {
   try {
+    await db.execute(sql`TRUNCATE TABLE jurisdictions RESTART IDENTITY CASCADE`)
+    await db.execute(
+      sql`TRUNCATE TABLE identifier_systems RESTART IDENTITY CASCADE`,
+    )
     await seedIdentifierSystems()
     await seedSpatialData()
+    await seedTaxRates()
   } catch (error) {
     console.log('Error seeding database:', error)
   }
