@@ -13,7 +13,11 @@ interface AppHeaderProps {
 
 function Logo() {
   return (
-    <Link className="flex items-center gap-2" to="/">
+    <Link
+      className="flex items-center gap-2"
+      search={{ page: 1, pageSize: 20, sortBy: 'orderDate', sortDir: 'desc' }}
+      to="/"
+    >
       <Button size="icon">
         <Square className="size-4" />
       </Button>

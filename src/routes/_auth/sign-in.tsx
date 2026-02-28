@@ -55,7 +55,7 @@ function SignInPage() {
         })
         return
       }
-      navigate({ to: '/' })
+      navigate({ to: '/', search: { page: 1, pageSize: 20, sortBy: 'orderDate', sortDir: 'desc' } })
     },
   })
 

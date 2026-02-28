@@ -79,7 +79,7 @@ function InputGroupAddon({
 }
 
 const inputGroupButtonVariants = cva(
-  'text-sm shadow-none flex gap-2 items-center',
+  'text-sm shadow-none flex gap-2 items-center focus-visible:outline-none',
   {
     variants: {
       size: {
@@ -101,15 +101,31 @@ function InputGroupButton({
   type = 'button',
   variant = 'ghost',
   size = 'xs',
+  focusGroupOnClick = true,
+  onClick,
   ...props
 }: Omit<React.ComponentProps<typeof Button>, 'size'> &
-  VariantProps<typeof inputGroupButtonVariants>) {
+  VariantProps<typeof inputGroupButtonVariants> & {
+    /** After clicking, focus the first input-group-control in the parent InputGroup. Default: true. */
+    focusGroupOnClick?: boolean
+  }) {
+  function handleClick(e: React.MouseEvent<HTMLButtonElement>) {
+    onClick?.(e)
+    if (focusGroupOnClick) {
+      const control = e.currentTarget
+        .closest('[data-slot=input-group]')
+        ?.querySelector<HTMLElement>('[data-slot=input-group-control]')
+      control?.focus()
+    }
+  }
+
   return (
     <Button
       className={cn(inputGroupButtonVariants({ size }), className)}
       data-size={size}
       type={type}
       variant={variant}
+      onClick={handleClick}
       {...props}
     />
   )
