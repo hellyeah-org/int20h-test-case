@@ -195,7 +195,11 @@ export function DataTable<TData, TValue>({
             ) : table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => (
                 <React.Fragment key={row.id}>
-                  <TableRow data-state={row.getIsSelected() && 'selected'}>
+                  <TableRow
+                    className={renderSubComponent ? 'cursor-pointer' : undefined}
+                    data-state={row.getIsSelected() && 'selected'}
+                    onClick={() => renderSubComponent && row.toggleExpanded()}
+                  >
                     {row.getVisibleCells().map((cell) => (
                       <TableCell
                         key={cell.id}

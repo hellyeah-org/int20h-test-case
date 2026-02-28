@@ -29,7 +29,7 @@ const columnMap = {
 } satisfies Record<string, unknown>
 
 export const getOrders = createServerFn({ method: 'GET' })
-  .inputValidator((input: unknown) => ordersSearchSchema.parse(input))
+  .inputValidator(ordersSearchSchema)
   .handler(async ({ data }) => {
     const {
       page,
@@ -46,7 +46,7 @@ export const getOrders = createServerFn({ method: 'GET' })
     const conditions = []
 
     if (id) {
-      conditions.push(ilike(orders.id, `%${id}%`))
+      conditions.push(ilike(sql`${orders.id}::text`, `%${id}%`))
     }
     if (dateFrom) {
       conditions.push(gte(orders.orderDate, dateFrom))

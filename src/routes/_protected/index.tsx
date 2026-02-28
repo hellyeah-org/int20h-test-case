@@ -1,6 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { ImportJobTracker } from '#/components/orders/import-job-tracker'
 import { OrdersDataTable } from '#/components/orders/orders-data-table'
+import { ImportJobProvider } from '#/lib/import-job-context'
 import { ordersQueryOptions } from '#/lib/orders.queries'
 import { ordersSearchSchema } from '#/lib/orders.functions'
 
@@ -14,8 +16,11 @@ export const Route = createFileRoute('/_protected/')({
 
 function HomePage() {
   return (
-    <main className="container mx-auto py-8 px-4">
-      <OrdersDataTable />
-    </main>
+    <ImportJobProvider>
+      <ImportJobTracker />
+      <main className="container mx-auto py-8 px-4">
+        <OrdersDataTable />
+      </main>
+    </ImportJobProvider>
   )
 }

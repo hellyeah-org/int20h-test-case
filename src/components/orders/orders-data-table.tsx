@@ -190,14 +190,14 @@ function SplitDatePicker({
       label={label}
       left={
         <DatePickerField
-          placeholder="From…"
+          placeholder="From"
           value={fromValue}
           onChange={onFromChange}
         />
       }
       right={
         <DatePickerField
-          placeholder="To…"
+          placeholder="To"
           value={toValue}
           onChange={onToChange}
         />
@@ -312,7 +312,10 @@ const columns: Array<ColumnDef<Order>> = [
         aria-label={row.getIsExpanded() ? 'Collapse row' : 'Expand row'}
         className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-6 items-center justify-center rounded transition-colors"
         type="button"
-        onClick={row.getToggleExpandedHandler()}
+        onClick={(e) => {
+          e.stopPropagation()
+          row.getToggleExpandedHandler()()
+        }}
       >
         {row.getIsExpanded() ? (
           <ChevronDownIcon className="size-4" />
@@ -525,7 +528,7 @@ export function OrdersDataTable() {
                       <label className="text-sm font-medium">Order ID</label>
                       <InputGroup className="w-52">
                         <InputGroupInput
-                          placeholder="Search by ID…"
+                          placeholder="Search by ID"
                           value={filters.id}
                           onChange={(e) => setField('id', e.target.value)}
                         />

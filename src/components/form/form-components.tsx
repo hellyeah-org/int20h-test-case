@@ -1,3 +1,4 @@
+import { CircleAlertIcon } from 'lucide-react'
 import { useFormContext } from '#/hooks/form-context'
 import { Button } from '#/components/ui/button'
 import { Alert, AlertDescription } from '#/components/ui/alert'
@@ -36,6 +37,7 @@ export function FormError() {
               : null
         return message ? (
           <Alert variant="destructive">
+            <CircleAlertIcon />
             <AlertDescription>{message}</AlertDescription>
           </Alert>
         ) : null

@@ -1,8 +1,9 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
+import { processImportFile, markJobCancelled } from '#/lib/csv-import.server'
+
 export const uploadCsvFileSchema = z.object({
-  // Base64-encoded file content — placeholder until real S3 multipart upload is wired
   filename: z.string().min(1),
   content: z.string().min(1),
 })
@@ -13,23 +14,34 @@ export type UploadCsvFileResult = {
   jobId: string
 }
 
-/**
- * TODO: Replace stub logic with real implementation:
- *  1. Decode base64 `content` and upload the raw CSV bytes to S3
- *  2. Push a job onto the Redis/BullMQ queue referencing the S3 key
- *  3. Store initial status { status: 'queued', progress: 0 } in Redis under the jobId
- *  4. Return the jobId so the client can poll getImportJobStatus
- */
 export const uploadCsvFile = createServerFn({ method: 'POST' })
-  .inputValidator((input: unknown) => uploadCsvFileSchema.parse(input))
+  .inputValidator(uploadCsvFileSchema)
   .handler(async ({ data }): Promise<UploadCsvFileResult> => {
-    // Stub: generate a random jobId and return it immediately.
-    // The real implementation uploads to S3 and queues a worker job here.
-    const jobId = crypto.randomUUID()
+    // Decode base64 content back to a File object
+    const binaryStr = atob(data.content)
+    const bytes = new Uint8Array(binaryStr.length)
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i)
+    }
+    const file = new File([bytes], data.filename, { type: 'text/csv' })
 
-    console.log(
-      `[csv-import] Stub upload received: filename=${data.filename}, jobId=${jobId}`,
-    )
+    // Use PUBLIC_BASE_URL or fall back to localhost for dev
+    const baseUrl = process.env.PUBLIC_BASE_URL ?? 'http://localhost:3000'
+
+    const jobId = await processImportFile(file, 500, baseUrl)
 
     return { jobId }
+  })
+
+// ─── Cancel an in-progress import job ─────────────────────────────────────────
+
+const cancelImportJobSchema = z.object({
+  jobId: z.string().uuid(),
+})
+
+export const cancelImportJob = createServerFn({ method: 'POST' })
+  .inputValidator(cancelImportJobSchema)
+  .handler(async ({ data }) => {
+    await markJobCancelled(data.jobId)
+    return { success: true }
   })

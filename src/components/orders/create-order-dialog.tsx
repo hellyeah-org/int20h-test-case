@@ -190,7 +190,7 @@ export function CreateOrderDialog() {
               {(field) => {
                 const isInvalid =
                   (field.state.meta.isBlurred || submissionAttempts > 0) &&
-                  !field.state.meta.isValid
+                  field.state.meta.errors.length > 0
                 return (
                   <Field data-invalid={isInvalid}>
                     <FieldContent>
@@ -216,7 +216,7 @@ export function CreateOrderDialog() {
               {(field) => {
                 const isInvalid =
                   (field.state.meta.isBlurred || submissionAttempts > 0) &&
-                  !field.state.meta.isValid
+                  field.state.meta.errors.length > 0
                 return (
                   <Field data-invalid={isInvalid}>
                     <FieldContent>
@@ -244,7 +244,7 @@ export function CreateOrderDialog() {
             {(field) => {
               const isInvalid =
                 (field.state.meta.isBlurred || submissionAttempts > 0) &&
-                !field.state.meta.isValid
+                field.state.meta.errors.length > 0
               return (
                 <Field data-invalid={isInvalid}>
                   <FieldContent>

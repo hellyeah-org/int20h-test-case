@@ -2,12 +2,14 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { queryOptions } from '@tanstack/react-query'
 
+import { getJobStatus } from '#/lib/csv-import.server'
+
 export type ImportJobStatus = 'queued' | 'processing' | 'done' | 'failed'
 
 export type ImportJobStatusResult = {
   jobId: string
   status: ImportJobStatus
-  /** Overall progress percentage 0–100 */
+  /** Overall progress percentage 0-100 */
   progress: number
   /** Human-readable status message */
   message: string
@@ -22,70 +24,73 @@ const getImportJobStatusSchema = z.object({
 })
 
 /**
- * In-memory store simulating Redis job state for the stub.
- * Each jobId gets a start timestamp so we can progress it over time.
- *
- * TODO: Replace with real Redis reads:
- *  - HGETALL `import:job:<jobId>` → { status, progress, totalRows, processedRows, message }
+ * Map backend status strings to the frontend's ImportJobStatus union.
  */
-const jobStartTimes = new Map<string, number>()
+function mapBackendStatus(backendStatus: string): ImportJobStatus {
+  switch (backendStatus) {
+    case 'PENDING':
+      return 'queued'
+    case 'PROCESSING':
+      return 'processing'
+    case 'COMPLETED':
+      return 'done'
+    case 'FAILED':
+      return 'failed'
+    default:
+      return 'processing'
+  }
+}
 
-/**
- * TODO: Replace stub logic with real implementation:
- *  1. Read job state from Redis key `import:job:<jobId>`
- *  2. Return { status, progress, totalRows, processedRows, message }
- *  3. The worker (BullMQ processor) writes updates to Redis as it processes rows
- */
 export const getImportJobStatus = createServerFn({ method: 'GET' })
-  .inputValidator((input: unknown) => getImportJobStatusSchema.parse(input))
+  .inputValidator(getImportJobStatusSchema)
   .handler(async ({ data }): Promise<ImportJobStatusResult> => {
     const { jobId } = data
 
-    // Stub: simulate progress over ~12 seconds since the job was first polled
-    if (!jobStartTimes.has(jobId)) {
-      jobStartTimes.set(jobId, Date.now())
-    }
+    const job = await getJobStatus(jobId)
 
-    const elapsed = Date.now() - jobStartTimes.get(jobId)!
-    const totalRows = 500
-
-    if (elapsed < 1500) {
+    if (!job) {
       return {
         jobId,
-        status: 'queued',
+        status: 'failed',
         progress: 0,
-        message: 'Waiting in queue…',
-        totalRows,
-        processedRows: 0,
+        message: 'Job not found.',
       }
     }
 
-    if (elapsed < 10000) {
-      const processedRows = Math.min(
-        Math.floor(((elapsed - 1500) / 8500) * totalRows),
-        totalRows,
-      )
-      const progress = Math.round((processedRows / totalRows) * 100)
-      return {
-        jobId,
-        status: 'processing',
-        progress,
-        message: `Processing rows… (${processedRows} / ${totalRows})`,
-        totalRows,
-        processedRows,
-      }
+    const status = mapBackendStatus(job.status)
+    const total = job.total
+    const processed = job.processed
+
+    let progress = 0
+    if (total > 0) {
+      progress = Math.round((processed / total) * 100)
     }
 
-    // Clean up stub memory after job completes
-    jobStartTimes.delete(jobId)
+    let message: string
+    switch (status) {
+      case 'queued':
+        message = 'Waiting in queue\u2026'
+        break
+      case 'processing':
+        message = `Processing rows\u2026 (${processed} / ${total})`
+        break
+      case 'done':
+        message = `Successfully imported ${processed} orders.`
+        break
+      case 'failed':
+        message = `Import failed. ${job.failed} rows failed out of ${total}.`
+        break
+      default:
+        message = 'Unknown status.'
+    }
 
     return {
       jobId,
-      status: 'done',
-      progress: 100,
-      message: `Successfully imported ${totalRows} orders.`,
-      totalRows,
-      processedRows: totalRows,
+      status,
+      progress,
+      message,
+      totalRows: total,
+      processedRows: processed,
     }
   })
 

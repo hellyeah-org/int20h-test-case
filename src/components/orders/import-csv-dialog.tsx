@@ -12,10 +12,18 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import type { ImportJobStatus } from '#/lib/csv-import.queries'
-import { uploadCsvFile } from '#/lib/csv-import.mutations'
+import type { ImportJobStatus, ImportJobStatusResult } from '#/lib/csv-import.queries'
+import { cancelImportJob, uploadCsvFile } from '#/lib/csv-import.mutations'
 import { importJobStatusQueryOptions } from '#/lib/csv-import.queries'
+import { useImportJob } from '#/lib/import-job-context'
 import { cn } from '#/lib/utils'
+import {
+  dismissImportProgressToast,
+  resetImportErrorState,
+  showImportErrorToast,
+  showImportProgressToast,
+  updateImportProgressToast,
+} from '#/lib/import-toast'
 import { Button } from '#/components/ui/button'
 import {
   Dialog,
@@ -199,30 +207,77 @@ function JobProgress({ jobId }: { jobId: string }) {
 // ─── ImportCsvDialog ──────────────────────────────────────────────────────────
 
 export function ImportCsvDialog() {
+  const { activeJobId, setActiveJobId } = useImportJob()
   const [open, setOpen] = useState(false)
   const [phase, setPhase] = useState<ModalPhase>('idle')
   const [file, setFile] = useState<File | null>(null)
   const [isDragging, setIsDragging] = useState(false)
-  const [jobId, setJobId] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  // Keep a ref to the active jobId so the status query can be started before
-  // the state update re-renders.
-  const jobStatusQuery = useQuery(importJobStatusQueryOptions(jobId))
+  /** ID of the persistent Sonner progress toast for the current job. */
+  const progressToastIdRef = useRef<string | number | null>(null)
+
+  // Poll the active job while the dialog is open
+  const jobStatusQuery = useQuery(importJobStatusQueryOptions(activeJobId))
   const jobStatus = jobStatusQuery.data?.status
 
-  // Sync phase with job status changes coming from the polling query
+  // When the active job is cleared externally (e.g. tracker reset), dismiss the
+  // progress toast if we were still showing one.
+  const prevActiveJobId = useRef<string | null | undefined>(undefined)
+  if (activeJobId !== prevActiveJobId.current) {
+    if (activeJobId === null && progressToastIdRef.current) {
+      dismissImportProgressToast(progressToastIdRef.current)
+      progressToastIdRef.current = null
+    }
+    prevActiveJobId.current = activeJobId
+  }
+
+  // Sync phase when the dialog is reopened and there's already an active job
+  // or when job status transitions while the dialog is open.
   const prevJobStatus = useRef<typeof jobStatus>(undefined)
   if (jobStatus !== prevJobStatus.current) {
     prevJobStatus.current = jobStatus
-    if (jobStatus === 'done' && phase === 'processing') setPhase('done')
+
+    if (jobStatus === 'done' && phase === 'processing') {
+      setPhase('done')
+    }
+
     if (jobStatus === 'failed' && phase === 'processing') {
+      const msg =
+        jobStatusQuery.data?.message ?? 'Processing failed. Please try again.'
       setPhase('error')
-      setErrorMessage(
-        jobStatusQuery.data?.message ?? 'Processing failed. Please try again.',
+      setErrorMessage(msg)
+      showImportErrorToast(msg)
+    }
+  }
+
+  // Keep the persistent progress toast in sync on every new poll result,
+  // not just on status transitions (so row counts update while processing).
+  const prevDataRef = useRef<ImportJobStatusResult | undefined>(undefined)
+  if (jobStatusQuery.data && jobStatusQuery.data !== prevDataRef.current) {
+    prevDataRef.current = jobStatusQuery.data
+    if (progressToastIdRef.current) {
+      updateImportProgressToast(
+        progressToastIdRef.current,
+        jobStatusQuery.data,
+        handleCancelFromToast,
       )
     }
   }
+
+  // When dialog opens and a job is already running, show the processing phase
+  const prevOpen = useRef(false)
+  if (open && !prevOpen.current && activeJobId) {
+    // Re-entering the dialog while a job is active
+    if (jobStatus === 'done') {
+      setPhase('done')
+    } else if (jobStatus === 'failed') {
+      setPhase('error')
+    } else {
+      setPhase('processing')
+    }
+  }
+  prevOpen.current = open
 
   const handleFileSelect = useCallback((selected: File) => {
     setFile(selected)
@@ -234,23 +289,38 @@ export function ImportCsvDialog() {
     setErrorMessage(null)
   }, [])
 
+  async function handleCancelFromToast() {
+    if (!activeJobId) return
+    try {
+      await cancelImportJob({ data: { jobId: activeJobId } })
+    } catch {
+      toast.error('Could not cancel the import.')
+    }
+  }
+
   async function handleUpload() {
     if (!file) return
     setPhase('uploading')
     setErrorMessage(null)
+    resetImportErrorState()
 
     try {
       const content = await readFileAsBase64(file)
       const result = await uploadCsvFile({
         data: { filename: file.name, content },
       })
-      setJobId(result.jobId)
+      setActiveJobId(result.jobId)
       setPhase('processing')
+      progressToastIdRef.current = showImportProgressToast(
+        result.jobId,
+        handleCancelFromToast,
+      )
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Upload failed. Please try again.'
       setErrorMessage(message)
       setPhase('error')
+      showImportErrorToast(message)
     }
   }
 
@@ -258,13 +328,14 @@ export function ImportCsvDialog() {
     // Prevent accidental close while uploading
     if (!next && phase === 'uploading') return
     setOpen(next)
-    if (!next) resetState()
+    if (!next) resetDialogState()
   }
 
-  function resetState() {
+  function resetDialogState() {
+    // Reset dialog-local state but do NOT clear activeJobId — the tracker
+    // keeps tracking the job after the dialog closes.
     setPhase('idle')
     setFile(null)
-    setJobId(null)
     setErrorMessage(null)
     setIsDragging(false)
   }
@@ -273,6 +344,9 @@ export function ImportCsvDialog() {
     phase === 'processing' && jobStatus !== 'done' && jobStatus !== 'failed'
 
   const uploadDisabled = phase !== 'idle' && phase !== 'error'
+
+  // If there's an active job, don't show the upload UI
+  const showDropZone = (phase === 'idle' || phase === 'error') && !activeJobId
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -294,7 +368,7 @@ export function ImportCsvDialog() {
 
         <div className="flex flex-col gap-4">
           {/* Drop zone — hidden once a job is running */}
-          {(phase === 'idle' || phase === 'error') && (
+          {showDropZone && (
             <DropZone
               disabled={uploadDisabled}
               file={file}
@@ -321,8 +395,8 @@ export function ImportCsvDialog() {
           )}
 
           {/* Job progress — visible during and after processing */}
-          {(phase === 'processing' || phase === 'done') && jobId && (
-            <JobProgress jobId={jobId} />
+          {(phase === 'processing' || phase === 'done') && activeJobId && (
+            <JobProgress jobId={activeJobId} />
           )}
 
           {/* Success message */}
@@ -354,7 +428,7 @@ export function ImportCsvDialog() {
           )}
 
           {/* Upload button — only shown before processing starts */}
-          {(phase === 'idle' || phase === 'error') && (
+          {showDropZone && (
             <Button disabled={!file} type="button" onClick={handleUpload}>
               Upload
             </Button>

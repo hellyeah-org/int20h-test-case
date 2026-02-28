@@ -6,9 +6,7 @@ import { db } from '#/db'
 import { taxLines } from '#/db/schema/tax'
 
 export const getTaxLines = createServerFn({ method: 'GET' })
-  .inputValidator((input: unknown) =>
-    z.object({ orderId: z.string().uuid() }).parse(input),
-  )
+  .inputValidator(z.object({ orderId: z.string().uuid() }))
   .handler(async ({ data }) => {
     return db
       .select({
